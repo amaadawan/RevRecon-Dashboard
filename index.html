@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DASHBOARD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+
+  <!-- ░░ Password gate ░░ -->
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <div class="gate-mark">▦</div>
+      <h1 class="gate-title">DASHBOARD</h1>
+      <p class="gate-sub">Enter the password to continue</p>
+      <input type="password" id="gateInput" class="gate-input" placeholder="Password" autocomplete="current-password" />
+      <button class="gate-btn" id="gateBtn">Unlock</button>
+      <p class="gate-error" id="gateError"></p>
+    </div>
+  </div>
+
+  <!-- ░░ App ░░ -->
+  <div id="app" class="app" hidden>
+
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">▦</span>
+        <span class="brand-name" id="brandName">DASHBOARD</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="overview"><span class="nav-ico">◧</span>Overview</button>
+        <button class="nav-item" data-view="restaurants"><span class="nav-ico">❤</span>Restaurant health</button>
+        <button class="nav-item" data-view="processing"><span class="nav-ico">⇄</span>Payment processing</button>
+        <button class="nav-item" data-view="segments"><span class="nav-ico">⊞</span>Segments</button>
+        <button class="nav-item" data-view="forecast"><span class="nav-ico">⟁</span>Forecast</button>
+      </nav>
+      <div class="side-foot">
+        <div class="sync"><span class="dot" id="dot"></span><span id="syncText">Connecting…</span></div>
+        <button class="ghost-btn" id="refreshBtn">↻ Refresh</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 class="ptitle" id="ptitle">Overview</h2>
+          <p class="psub" id="psub">—</p>
+        </div>
+        <div class="topbar-right">
+          <label class="period-label">Period</label>
+          <select id="period" class="period"></select>
+        </div>
+      </header>
+
+      <div id="err" class="err" hidden></div>
+
+      <!-- Overview -->
+      <section class="view active" id="v-overview">
+        <div class="cards" id="ov-cards"></div>
+        <div class="row">
+          <div class="panel panel-wide">
+            <div class="panel-h"><span class="panel-t">Revenue by month</span><span class="lgnd" id="ov-legend"></span></div>
+            <div class="cv"><canvas id="ovChart"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="panel-h"><span class="panel-t">Stream split</span></div>
+            <div class="cv cv-sm"><canvas id="ovSplit"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Restaurant health -->
+      <section class="view" id="v-restaurants">
+        <div class="cards" id="rh-cards"></div>
+        <div class="panel">
+          <div class="panel-h">
+            <span class="panel-t">Payment health</span>
+            <div class="controls">
+              <input type="search" id="rh-search" class="search" placeholder="Search restaurant…" />
+              <select id="rh-sort" class="mini">
+                <option value="health">Sort: health</option>
+                <option value="owed">Sort: owed</option>
+                <option value="collected">Sort: collected</option>
+                <option value="name">Sort: name</option>
+              </select>
+            </div>
+          </div>
+          <div id="rh-list" class="rh-list"></div>
+        </div>
+      </section>
+
+      <!-- Payment processing -->
+      <section class="view" id="v-processing">
+        <div class="cards" id="pp-cards"></div>
+        <div class="row">
+          <div class="panel panel-wide">
+            <div class="panel-h"><span class="panel-t">Commission by month</span></div>
+            <div class="cv"><canvas id="ppChart"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="panel-h"><span class="panel-t">Top by commission</span></div>
+            <div id="pp-list" class="mini-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Segments -->
+      <section class="view" id="v-segments">
+        <div class="seg-controls">
+          <label class="chk"><input type="checkbox" id="seg-payroll" /> Show only restaurants with payroll</label>
+        </div>
+        <div class="matrix" id="seg-matrix"></div>
+        <div class="panel">
+          <div class="panel-h"><span class="panel-t" id="seg-list-title">Select a segment above</span></div>
+          <div id="seg-list" class="mini-list"></div>
+        </div>
+      </section>
+
+      <!-- Forecast -->
+      <section class="view" id="v-forecast">
+        <div class="cards" id="fc-cards"></div>
+        <div class="panel">
+          <div class="panel-h"><span class="panel-t">Revenue forecast — next 6 months</span><span class="lgnd" id="fc-legend"></span></div>
+          <div class="cv cv-tall"><canvas id="fcChart"></canvas></div>
+        </div>
+        <p class="note">Projection is a straight-line trend from all loaded months. It is a guide, not a guarantee.</p>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
