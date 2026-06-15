@@ -16,3 +16,4 @@ const CONFIG = {
   PASSWORD: 'changeme',
   BRAND: 'DASHBOARD',
 };
+
