@@ -1,7 +1,5 @@
-month,reference id,restaurant,status,platform,onboarding date,paused/cancelled date,gross revenue,fees,net revenue,refunds,platform fee,per day,days in month,payment processing,saas,payroll,camp
-2026-05,235045387053,Flights Las Vegas,Active,Stripe,Before Jan 2026,,796,19.54,776.46,0,199,28.43,31,7176.41,881.29,465,4428.57
-2026-05,278006364866,20Twenty,Active,Stripe,Before Jan 2026,,396,12.68,383.32,0,99,14.14,31,265.17,438.43,0,0
-2026-05,250498560161,Kyoto Palace,Active,Adyen,Before Jan 2026,,792,0,792,0,198,28.29,31,1106.43,876.86,0,0
-2026-05,313234768600,360 Gourmet Burritos of Alameda,Active,Hubspot,17-Apr-26,,316.80,12.76,304.04,0,79.20,11.31,14,889.13,158.40,0,0
-2026-05,237560301251,Boloco,Active,Stripe,Before Jan 2026,,0,0,0,0,0,0,0,837.46,0,0,0
-2026-05,318308343488,La Esquina Mexican Food,Active,Stripe,Before Jan 2026,,0,0,0,0,0,0,0,209.93,0,0,0
+month,restaurant,status,platform,city,state,onboarding date,paused/cancelled date,billing cycle,gross revenue,fees,net revenue,refunds,platform fee,payment processing,saas,payroll,camp,volume,hardware cost
+2026-05,Flights Las Vegas,Active,Stripe,Las Vegas,NV,Before Jan 2026,,Weekly,796,19.54,776.46,0,199,7176.41,881.29,465,4428.57,287056,900
+2026-05,Ca Phe Viet - San Francisco,Active,Hubspot,San Francisco,CA,2026-02,,Weekly,297,4.59,292.41,198,99,247.60,396,0,0,9904,0
+2026-05,Tacos El Compa,Active,Adyen,San Jose,CA,Before Jan 2026,,Weekly,225,0,225,0,75,41.61,332.14,0,0,1664,0
+2026-05,Boloco,Active,Stripe,Cambridge,MA,Before Jan 2026,,Monthly,0,0,0,0,0,837.46,0,0,0,33498,0

@@ -10,10 +10,11 @@
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
-  <!-- ░░ Password gate ░░ -->
+  <!-- Password gate -->
   <div id="gate" class="gate">
     <div class="gate-card">
       <div class="gate-mark">▦</div>
@@ -25,18 +26,15 @@
     </div>
   </div>
 
-  <!-- ░░ App ░░ -->
+  <!-- App -->
   <div id="app" class="app" hidden>
-
     <aside class="sidebar">
-      <div class="brand">
-        <span class="brand-mark">▦</span>
-        <span class="brand-name" id="brandName">DASHBOARD</span>
-      </div>
+      <div class="brand"><span class="brand-mark">▦</span><span class="brand-name" id="brandName">DASHBOARD</span></div>
       <nav class="nav">
         <button class="nav-item active" data-view="overview"><span class="nav-ico">◧</span>Overview</button>
         <button class="nav-item" data-view="restaurants"><span class="nav-ico">❤</span>Restaurant health</button>
         <button class="nav-item" data-view="processing"><span class="nav-ico">⇄</span>Payment processing</button>
+        <button class="nav-item" data-view="margins"><span class="nav-ico">▤</span>Margins</button>
         <button class="nav-item" data-view="segments"><span class="nav-ico">⊞</span>Segments</button>
         <button class="nav-item" data-view="forecast"><span class="nav-ico">⟁</span>Forecast</button>
       </nav>
@@ -48,13 +46,11 @@
 
     <main class="main">
       <header class="topbar">
-        <div>
-          <h2 class="ptitle" id="ptitle">Overview</h2>
-          <p class="psub" id="psub">—</p>
-        </div>
+        <div><h2 class="ptitle" id="ptitle">Overview</h2><p class="psub" id="psub">—</p></div>
         <div class="topbar-right">
-          <label class="period-label">Period</label>
+          <select id="stateFilter" class="period" title="Filter by state"></select>
           <select id="period" class="period"></select>
+          <button class="export-btn" id="exportBtn" title="Export current view to Excel">⭳ Export</button>
         </div>
       </header>
 
@@ -65,13 +61,17 @@
         <div class="cards" id="ov-cards"></div>
         <div class="row">
           <div class="panel panel-wide">
-            <div class="panel-h"><span class="panel-t">Revenue by month</span><span class="lgnd" id="ov-legend"></span></div>
+            <div class="panel-h"><span class="panel-t">Top-line revenue by month</span><span class="lgnd" id="ov-legend"></span></div>
             <div class="cv"><canvas id="ovChart"></canvas></div>
           </div>
           <div class="panel">
             <div class="panel-h"><span class="panel-t">Stream split</span></div>
             <div class="cv cv-sm"><canvas id="ovSplit"></canvas></div>
           </div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><span class="panel-t">Revenue by state</span></div>
+          <div id="ov-state" class="mini-list"></div>
         </div>
       </section>
 
@@ -85,7 +85,7 @@
               <input type="search" id="rh-search" class="search" placeholder="Search restaurant…" />
               <select id="rh-sort" class="mini">
                 <option value="health">Sort: health</option>
-                <option value="owed">Sort: owed</option>
+                <option value="owed">Sort: uncollected</option>
                 <option value="collected">Sort: collected</option>
                 <option value="name">Sort: name</option>
               </select>
@@ -100,21 +100,33 @@
         <div class="cards" id="pp-cards"></div>
         <div class="row">
           <div class="panel panel-wide">
-            <div class="panel-h"><span class="panel-t">Commission by month</span></div>
+            <div class="panel-h"><span class="panel-t">Payment Processing Revenue by month</span></div>
             <div class="cv"><canvas id="ppChart"></canvas></div>
           </div>
           <div class="panel">
-            <div class="panel-h"><span class="panel-t">Top by commission</span></div>
-            <div id="pp-list" class="mini-list"></div>
+            <div class="panel-h"><span class="panel-t">By restaurant</span></div>
+            <div id="pp-list" class="mini-list mini-list--3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Margins -->
+      <section class="view" id="v-margins">
+        <div class="cards" id="mg-cards"></div>
+        <div class="panel">
+          <div class="panel-h"><span class="panel-t">Top-line → costs → contribution (cash basis)</span></div>
+          <div class="table-wrap">
+            <table class="data-table" id="mg-table">
+              <thead><tr><th>Restaurant</th><th class="num">Top-line</th><th class="num">Fees</th><th class="num">Hardware</th><th class="num">Contribution</th></tr></thead>
+              <tbody></tbody>
+            </table>
           </div>
         </div>
       </section>
 
       <!-- Segments -->
       <section class="view" id="v-segments">
-        <div class="seg-controls">
-          <label class="chk"><input type="checkbox" id="seg-payroll" /> Show only restaurants with payroll</label>
-        </div>
+        <div class="seg-controls"><label class="chk"><input type="checkbox" id="seg-payroll" /> Show only restaurants with payroll</label></div>
         <div class="matrix" id="seg-matrix"></div>
         <div class="panel">
           <div class="panel-h"><span class="panel-t" id="seg-list-title">Select a segment above</span></div>
@@ -126,13 +138,21 @@
       <section class="view" id="v-forecast">
         <div class="cards" id="fc-cards"></div>
         <div class="panel">
-          <div class="panel-h"><span class="panel-t">Revenue forecast — next 6 months</span><span class="lgnd" id="fc-legend"></span></div>
+          <div class="panel-h"><span class="panel-t">Top-line revenue forecast — next 6 months</span><span class="lgnd" id="fc-legend"></span></div>
           <div class="cv cv-tall"><canvas id="fcChart"></canvas></div>
         </div>
-        <p class="note">Projection is a straight-line trend from all loaded months. It is a guide, not a guarantee.</p>
+        <p class="note">Straight-line trend from loaded months (least-squares). A directional guide, not a guarantee — it ignores seasonality, churn, and pipeline.</p>
       </section>
-
     </main>
+  </div>
+
+  <!-- Single-restaurant focused page -->
+  <div id="detail" class="detail" hidden>
+    <div class="detail-bar">
+      <button class="back-btn" id="detailBack">← Back</button>
+      <button class="export-btn" id="detailExport">⭳ Export</button>
+    </div>
+    <div class="detail-inner" id="detail-content"></div>
   </div>
 
   <script src="config.js"></script>
