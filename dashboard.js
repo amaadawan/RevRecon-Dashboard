@@ -43,18 +43,62 @@ function monthLabel(m){const [y,mo]=m.split('-');return new Date(+y,(+mo)-1).toL
 /* ---------- load ---------- */
 async function loadData(){
   setSync(false,'Loading…'); hideErr();
-  const url=(typeof CONFIG!=='undefined'&&CONFIG.SHEETS_CSV_URL)?CONFIG.SHEETS_CSV_URL:'';
-  if(!url){ ALL=demoData(); setSync(true,'Demo data');
-    document.getElementById('psub').textContent='Demo data — add your Sheet URL in config.js'; afterLoad(); return; }
-  try{
-    const res=await fetch(url); if(!res.ok) throw new Error('HTTP '+res.status);
-    const parsed=Papa.parse(await res.text(),{header:true,skipEmptyLines:true});
-    ALL=parsed.data.map(mapRow).filter(r=>r.month&&r.restaurant);
-    if(!ALL.length) throw new Error('No rows found');
-    setSync(true,'Live'); document.getElementById('psub').textContent='Updated '+new Date().toLocaleTimeString(); afterLoad();
-  }catch(err){ setSync(false,'Error');
-    showErr('<b>Could not load your Google Sheet.</b> Check the URL in config.js is published as CSV. Showing demo data meanwhile.<br>Detail: '+err.message);
-    ALL=demoData(); afterLoad(); }
+  const cfg=(typeof CONFIG!=='undefined')?CONFIG:{};
+
+  // 1) Supabase (preferred)
+  if(cfg.SUPABASE_URL && cfg.SUPABASE_KEY){
+    try{
+      const base=cfg.SUPABASE_URL.replace(/\/$/,'');
+      const table=cfg.TABLE||'revenue';
+      const res=await fetch(`${base}/rest/v1/${table}?select=*&order=month.asc`,{
+        headers:{apikey:cfg.SUPABASE_KEY,Authorization:'Bearer '+cfg.SUPABASE_KEY}
+      });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data=await res.json();
+      if(!Array.isArray(data)||!data.length) throw new Error('Table returned no rows');
+      ALL=data.map(mapSbRow).filter(r=>r.month&&r.restaurant);
+      setSync(true,'Live');
+      document.getElementById('psub').textContent='Live · updated '+new Date().toLocaleTimeString();
+      afterLoad(); return;
+    }catch(err){
+      setSync(false,'Error');
+      showErr('<b>Could not load from the database.</b> Showing demo data meanwhile. Check the Supabase URL/key in config.js and that the read policy is set.<br>Detail: '+err.message);
+      ALL=demoData(); afterLoad(); return;
+    }
+  }
+
+  // 2) Legacy CSV source (optional)
+  if(cfg.SHEETS_CSV_URL){
+    try{
+      const res=await fetch(cfg.SHEETS_CSV_URL); if(!res.ok) throw new Error('HTTP '+res.status);
+      const parsed=Papa.parse(await res.text(),{header:true,skipEmptyLines:true});
+      ALL=parsed.data.map(mapRow).filter(r=>r.month&&r.restaurant);
+      if(!ALL.length) throw new Error('No rows found');
+      setSync(true,'Live'); document.getElementById('psub').textContent='Updated '+new Date().toLocaleTimeString(); afterLoad(); return;
+    }catch(err){ setSync(false,'Error');
+      showErr('<b>Could not load the CSV source.</b> Showing demo data.<br>Detail: '+err.message);
+      ALL=demoData(); afterLoad(); return; }
+  }
+
+  // 3) Demo
+  ALL=demoData(); setSync(true,'Demo data');
+  document.getElementById('psub').textContent='Demo data — add your Supabase details in config.js'; afterLoad();
+}
+
+/* map a Supabase row (underscore columns) to the dashboard's shape */
+function mapSbRow(r){
+  const norm=s=>{s=String(s||'');const m=s.match(/(\d{4})-(\d{2})/);if(m)return m[1]+'-'+m[2];const d=new Date(s);return isNaN(d)?null:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
+  const month=String(r.month||'').trim();
+  const onM=norm(r.onboarding_date), caM=norm(r.cancelled_date);
+  const partial=(onM&&onM===month)||(caM&&caM===month);
+  return {
+    month, restaurant:String(r.restaurant||'').trim(), status:String(r.status||'Active').trim(),
+    platform:String(r.platform||'').trim(), city:String(r.city||'').trim(), state:String(r.state||'').trim().toUpperCase(),
+    onboard:r.onboarding_date||'', cancel:r.cancelled_date||'', cycle:String(r.billing_cycle||'Weekly').trim(),
+    gross:+r.gross_revenue||0, fees:+r.fees||0, net:+r.net_revenue||0, refunds:+r.refunds||0,
+    platformFee:+r.platform_fee||0, pp:+r.payment_processing||0, saas:+r.saas||0,
+    payroll:+r.payroll||0, camp:+r.camp||0, volume:+r.volume||0, hardware:+r.hardware_cost||0, partial:!!partial,
+  };
 }
 const num=v=>{const n=parseFloat(String(v??'').replace(/[$,()]/g,''));return isNaN(n)?0:n;};
 function mapRow(r){

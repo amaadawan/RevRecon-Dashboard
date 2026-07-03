@@ -1,19 +1,24 @@
 /* ═══════════════════════════════════════════════════════════
    config.js  —  DASHBOARD SETTINGS
 
-   You only ever edit this file. Two things to set:
+   1) SUPABASE_URL + SUPABASE_KEY — your live database connection.
+      The dashboard reads your 'revenue' table from here.
+      (The publishable key is safe in the browser because Row Level
+      Security is on and only read access is allowed.)
 
-   1) SHEETS_CSV_URL — your published Google Sheet (CSV) link.
-      Leave it empty ('') to run on built-in demo data.
+   2) PASSWORD — the shared password for the view gate.
+      Change it whenever you're ready.
 
-   2) PASSWORD — the shared password for the gate.
-      Placeholder is 'changeme'. Change it whenever you're ready.
-      (This is a light gate, not bank-grade security — see README.)
+   If SUPABASE_URL is left empty, the dashboard falls back to the
+   built-in demo data.
 ═══════════════════════════════════════════════════════════ */
 
 const CONFIG = {
-  SHEETS_CSV_URL: '',
+  SUPABASE_URL: 'https://ebcgfaiabbabvzjjsmjg.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_m5FtIBK2ahTRif1rwCDUqQ_Q3QPqf7s',
+  TABLE: 'revenue',
+
+  SHEETS_CSV_URL: '',        // optional legacy CSV source (unused when Supabase is set)
   PASSWORD: 'changeme',
   BRAND: 'DASHBOARD',
 };
-
