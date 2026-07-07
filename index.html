@@ -36,7 +36,6 @@
         <button class="nav-item" data-view="processing"><span class="nav-ico">⇄</span>Payment processing</button>
         <button class="nav-item" data-view="margins"><span class="nav-ico">▤</span>Margins</button>
         <button class="nav-item" data-view="segments"><span class="nav-ico">⊞</span>Segments</button>
-        <button class="nav-item" data-view="forecast"><span class="nav-ico">⟁</span>Forecast</button>
       </nav>
       <div class="side-foot">
         <div class="sync"><span class="dot" id="dot"></span><span id="syncText">Connecting…</span></div>
@@ -133,16 +132,6 @@
           <div id="seg-list" class="mini-list"></div>
         </div>
       </section>
-
-      <!-- Forecast -->
-      <section class="view" id="v-forecast">
-        <div class="cards" id="fc-cards"></div>
-        <div class="panel">
-          <div class="panel-h"><span class="panel-t">Top-line revenue forecast — next 6 months</span><span class="lgnd" id="fc-legend"></span></div>
-          <div class="cv cv-tall"><canvas id="fcChart"></canvas></div>
-        </div>
-        <p class="note">Straight-line trend from loaded months (least-squares). A directional guide, not a guarantee — it ignores seasonality, churn, and pipeline.</p>
-      </section>
     </main>
   </div>
 
@@ -153,6 +142,17 @@
       <button class="export-btn" id="detailExport">⭳ Export</button>
     </div>
     <div class="detail-inner" id="detail-content"></div>
+  </div>
+
+  <!-- Active/Churned + State drill-down modal -->
+  <div id="listModal" class="list-modal" hidden>
+    <div class="list-modal-card">
+      <div class="list-modal-head">
+        <span id="listModalTitle" class="panel-t"></span>
+        <button class="back-btn" id="listModalClose">✕</button>
+      </div>
+      <div id="listModalBody" class="list-modal-body"></div>
+    </div>
   </div>
 
   <script src="config.js"></script>
