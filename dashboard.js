@@ -217,10 +217,11 @@ function renderOverview(){
   const restos=byRestaurant(ROWS);
   const active=restos.filter(r=>!/churn/i.test(r.status)).length, churn=restos.filter(r=>/churn/i.test(r.status)).length;
   document.getElementById('ov-cards').innerHTML=
-    card('Top-line revenue',fmt(tl)).replace('class="card"','class="card card-hero h-brand"')+
-    card('SaaS',fmt(t.saas)).replace('class="card"','class="card card-hero h-coral"')+
-    card('Payment processing',fmt(t.pp)).replace('class="card"','class="card card-hero h-teal"')+
-    card('CAMP + Payroll',fmt(t.camp+t.payroll))+card('Uncollected revenue',fmt(owed),'',owed>0?'owed':'good')+
+    card('Top-line revenue',fmt(tl)).replace('class="card"','class="card card-hero h-brand" style="cursor:pointer" onclick="showTopLineBreakdown()"')+
+    card('SaaS',fmt(t.saas)).replace('class="card"','class="card card-hero h-coral" style="cursor:pointer" onclick="showStreamBreakdown(\'saas\',\'SaaS\')"')+
+    card('Payment processing',fmt(t.pp)).replace('class="card"','class="card card-hero h-teal" style="cursor:pointer" onclick="showStreamBreakdown(\'pp\',\'Payment processing\')"')+
+    `<div class="card" style="cursor:pointer" onclick="showCampPayrollBreakdown()"><div class="card-l">CAMP + Payroll</div><div class="card-v">${fmt(t.camp+t.payroll)}</div></div>`+
+    `<div class="card" style="cursor:pointer" onclick="showUncollectedBreakdown()"><div class="card-l">Uncollected revenue</div><div class="card-v ${owed>0?'owed':'good'}">${fmt(owed)}</div></div>`+
     `<div class="card" style="cursor:pointer" onclick="switchView('roster')"><div class="card-l">Active · Churned</div><div class="card-v">${active} · ${churn}</div><div class="card-d">click to view list</div></div>`;
 
   const months=uniq(ALL.map(r=>r.month)).sort();
@@ -228,11 +229,14 @@ function renderOverview(){
   const mRows=m=>ALL.filter(r=>r.month===m&&(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
   const ds=STREAMS.map(s=>({label:s.label,data:months.map(m=>Math.round(sumK(mRows(m),s.key))),backgroundColor:s.color,borderRadius:3,stack:'a'}));
   document.getElementById('ov-legend').innerHTML=STREAMS.map(s=>`<span><i style="background:${s.color}"></i>${s.label}</span>`).join('');
-  upChart('ovChart',{type:'bar',data:{labels:months.map(monthLabel),datasets:ds},options:baseOpts({stacked:true})});
+  upChart('ovChart',{type:'bar',data:{labels:months.map(monthLabel),datasets:ds},options:{...baseOpts({stacked:true}),
+    onClick:(evt,els)=>{ if(els.length) showMonthTopLineBreakdown(months[els[0].index]); }}});
 
-  const split=STREAMS.map(s=>({label:s.label,v:t[s.key],c:s.color})).filter(x=>x.v>0);
+  const split=STREAMS.map(s=>({label:s.label,key:s.key,v:t[s.key],c:s.color})).filter(x=>x.v>0);
   upChart('ovSplit',{type:'doughnut',data:{labels:split.map(s=>s.label),datasets:[{data:split.map(s=>Math.round(s.v)),backgroundColor:split.map(s=>s.c),borderWidth:2,borderColor:'#1B3F4D'}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:9,padding:9,font:{size:11},color:'#9C9CA8'}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}});
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+      onClick:(evt,els)=>{ if(els.length){const item=split[els[0].index]; if(item) showStreamBreakdown(item.key,item.label);} },
+      plugins:{legend:{position:'bottom',labels:{boxWidth:9,padding:9,font:{size:11},color:'#9C9CA8'}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}});
 
   // by state
   const stateMap={}, stateCount={};
@@ -270,14 +274,17 @@ function renderOverview(){
     const mr = ALL.filter(r=>r.month===m && (SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
     return healthRows(mr).reduce((s,r)=>s+r.owed,0);
   });
-  upChart('ovUncollected',{type:'bar',data:{labels:months.map(monthLabel),datasets:[{label:'Uncollected',data:hrByMonth.map(Math.round),backgroundColor:'#E5675A',borderRadius:3}]},options:baseOpts()});
+  upChart('ovUncollected',{type:'bar',data:{labels:months.map(monthLabel),datasets:[{label:'Uncollected',data:hrByMonth.map(Math.round),backgroundColor:'#E5675A',borderRadius:3}]},options:{...baseOpts(),
+    onClick:(evt,els)=>{ if(els.length) showMonthUncollectedBreakdown(months[els[0].index]); }}});
 
   /* --- 4. Platform mix --- */
   const platMap={};
   restos.forEach(o=>{const k=o.platform||'Unknown';platMap[k]=(platMap[k]||0)+o.saas+o.pp+o.camp+o.payroll;});
   const platEnts=Object.entries(platMap).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
   upChart('ovPlatform',{type:'doughnut',data:{labels:platEnts.map(([k])=>k),datasets:[{data:platEnts.map(([,v])=>Math.round(v)),backgroundColor:platEnts.map((_,i)=>PIE[i%PIE.length]),borderWidth:2,borderColor:'#1B3F4D'}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:9,padding:9,font:{size:11},color:'#9C9CA8'}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}});
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+      onClick:(evt,els)=>{ if(els.length){const entry=platEnts[els[0].index]; if(entry) showPlatformBreakdown(entry[0]);} },
+      plugins:{legend:{position:'bottom',labels:{boxWidth:9,padding:9,font:{size:11},color:'#9C9CA8'}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}});
 
   /* --- 5. Fee-to-revenue ratio (overall + by platform) --- */
   const feeByPlat={}, grossByPlat={};
@@ -285,10 +292,10 @@ function renderOverview(){
   const totalFees=Object.values(feeByPlat).reduce((s,v)=>s+v,0), totalGross=Object.values(grossByPlat).reduce((s,v)=>s+v,0);
   const overallRatio = totalGross>0 ? (totalFees/totalGross*100) : 0;
   const platRows=Object.keys(grossByPlat).filter(k=>grossByPlat[k]>0).sort((a,b)=>grossByPlat[b]-grossByPlat[a])
-    .map(k=>`<div class="mini-item"><span class="nm"><span class="t">${k}</span></span><span class="vl">${(grossByPlat[k]>0?(feeByPlat[k]/grossByPlat[k]*100):0).toFixed(2)}%</span></div>`).join('');
+    .map(k=>`<div class="mini-item" style="cursor:pointer" onclick="showFeeBreakdown('${escA(k)}')"><span class="nm"><span class="t">${k}</span></span><span class="vl">${(grossByPlat[k]>0?(feeByPlat[k]/grossByPlat[k]*100):0).toFixed(2)}%</span></div>`).join('');
   document.getElementById('ov-feeratio').innerHTML = `
-    <div style="font-family:var(--mono);font-size:26px;font-weight:500;margin-bottom:4px">${overallRatio.toFixed(2)}%</div>
-    <div class="note" style="margin-bottom:14px">of SaaS revenue goes to processing fees</div>
+    <div style="font-family:var(--mono);font-size:26px;font-weight:700;margin-bottom:4px;cursor:pointer" onclick="showFeeBreakdown()">${overallRatio.toFixed(2)}%</div>
+    <div class="note" style="margin-bottom:14px">of SaaS revenue goes to processing fees · click any row for detail</div>
     ${platRows}`;
 }
 
@@ -326,6 +333,54 @@ function openListModal(title, html){
   document.getElementById('listModal').classList.add('open');
 }
 function closeListModal(){document.getElementById('listModal').classList.remove('open');}
+
+/* generic breakdown popup: items = [{label, value, sub, name}] */
+function showBreakdown(title, items){
+  if(!items.length){ openListModal(title, '<p class="note">No data for this selection.</p>'); return; }
+  const html = items.map((it,i)=>`
+    <div class="mini-item" style="cursor:pointer" onclick="closeListModal();openDetail('${escA(it.name)}')">
+      <span class="nm"><span class="swatch" style="background:${PIE[i%PIE.length]}"></span><span class="t">${it.label}</span>${it.sub?`<small style="color:var(--muted);margin-left:6px">${it.sub}</small>`:''}</span>
+      <span class="vl">${it.value}</span>
+    </div>`).join('');
+  openListModal(title, `<div class="mini-list">${html}</div>`);
+}
+/* helper: build a sorted restaurant breakdown from ROWS using a value function */
+function restoBreakdown(valueFn, rows){
+  return byRestaurant(rows||ROWS).map(o=>({name:o.restaurant,label:o.restaurant,num:valueFn(o),sub:[o.city,o.state].filter(Boolean).join(', ')}))
+    .filter(x=>x.num!==0).sort((a,b)=>b.num-a.num)
+    .map(x=>({name:x.name,label:x.label,value:fmt(x.num),sub:x.sub}));
+}
+function showTopLineBreakdown(){ showBreakdown('Top-line revenue breakdown', restoBreakdown(o=>o.saas+o.pp+o.camp+o.payroll)); }
+function showStreamBreakdown(key,label){ showBreakdown(label+' breakdown', restoBreakdown(o=>o[key])); }
+function showCampPayrollBreakdown(){ showBreakdown('CAMP + Payroll breakdown', restoBreakdown(o=>o.camp+o.payroll)); }
+function showUncollectedBreakdown(){
+  const items = healthRows(ROWS).filter(r=>r.owed>0.5).sort((a,b)=>b.owed-a.owed)
+    .map(r=>({name:r.restaurant,label:r.restaurant,value:fmt(r.owed),sub:Math.round(r.ratio*100)+'% collected'}));
+  showBreakdown('Uncollected revenue breakdown', items);
+}
+function showConcentrationBreakdown(){ showBreakdown('Revenue concentration — full list', restoBreakdown(o=>o.saas+o.pp+o.camp+o.payroll)); }
+function showMonthTopLineBreakdown(m){
+  const mr = ALL.filter(r=>r.month===m && (SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
+  showBreakdown('Top-line revenue — '+monthLabel(m), restoBreakdown(o=>o.saas+o.pp+o.camp+o.payroll, mr));
+}
+function showMonthUncollectedBreakdown(m){
+  const mr = ALL.filter(r=>r.month===m && (SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
+  const items = healthRows(mr).filter(r=>r.owed>0.5).sort((a,b)=>b.owed-a.owed)
+    .map(r=>({name:r.restaurant,label:r.restaurant,value:fmt(r.owed),sub:Math.round(r.ratio*100)+'% collected'}));
+  showBreakdown('Uncollected revenue — '+monthLabel(m), items);
+}
+function showPlatformBreakdown(platform){
+  const items = byRestaurant(ROWS).filter(o=>(o.platform||'Unknown')===platform)
+    .map(o=>({name:o.restaurant,label:o.restaurant,num:o.saas+o.pp+o.camp+o.payroll,sub:[o.city,o.state].filter(Boolean).join(', ')}))
+    .filter(x=>x.num!==0).sort((a,b)=>b.num-a.num).map(x=>({name:x.name,label:x.label,value:fmt(x.num),sub:x.sub}));
+  showBreakdown(platform+' — restaurant breakdown', items);
+}
+function showFeeBreakdown(platformFilter){
+  const items = byRestaurant(ROWS).filter(o=>o.gross>0 && (!platformFilter || (o.platform||'Unknown')===platformFilter))
+    .map(o=>({name:o.restaurant,label:o.restaurant,num:o.fees,sub:(o.gross>0?(o.fees/o.gross*100).toFixed(2):'0.00')+'% of gross'+(platformFilter?'':' · '+(o.platform||'Unknown'))}))
+    .sort((a,b)=>b.num-a.num).map(x=>({name:x.name,label:x.label,value:fmt(x.num),sub:x.sub}));
+  showBreakdown(platformFilter?platformFilter+' fees':'Fee breakdown — all platforms', items);
+}
 
 /* ---------- Restaurant health ---------- */
 function renderHealth(){
