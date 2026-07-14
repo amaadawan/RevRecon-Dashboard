@@ -26,12 +26,12 @@
 let ALL=[], ROWS=[], CHARTS={}, VIEW='overview', SEG_PICK=null, PREV_VIEW='overview';
 const TAKE_RATE=0.025; // demo: volume = pp / take_rate
 const STREAMS=[
-  {key:'saas',label:'SaaS',color:'#5B4FE0'},
-  {key:'pp',label:'Payment processing',color:'#B5790E'},
-  {key:'camp',label:'CAMP',color:'#2E7D52'},
-  {key:'payroll',label:'Payroll',color:'#3B7DD8'},
+  {key:'saas',label:'SaaS',color:'#EF4222'},
+  {key:'pp',label:'Payment processing',color:'#F26D42'},
+  {key:'camp',label:'CAMP',color:'#93C7D4'},
+  {key:'payroll',label:'Payroll',color:'#A9DDBC'},
 ];
-const PIE=['#5B4FE0','#B5790E','#2E7D52','#3B7DD8','#C0392B','#9B7BD4','#E0A458','#5BA37E'];
+const PIE=['#EF4222','#F26D42','#93C7D4','#A9DDBC','#F2B84A','#D9765C','#6FA8B5','#3FBE82'];
 
 /* ---------- helpers ---------- */
 const fmt=n=>'$'+Math.round(n).toLocaleString();
@@ -122,23 +122,41 @@ function mapRow(r){
 }
 
 /* ---------- after load ---------- */
-function afterLoad(){ buildPeriod(); buildStateFilter(); applyFilters(); }
+let SELECTED_STATES = new Set(); // empty = all states
+function afterLoad(){ buildPeriod(); buildStateMs(); applyFilters(); }
 function buildPeriod(){
   const months=uniq(ALL.map(r=>r.month)).sort();
-  const sel=document.getElementById('period');
-  sel.innerHTML='<option value="all">All time</option>'+months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');
-  sel.value=months.length?months[months.length-1]:'all';
+  const from=document.getElementById('periodFrom'), to=document.getElementById('periodTo');
+  const opts=months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');
+  from.innerHTML=opts; to.innerHTML=opts;
+  if(months.length){ from.value=months[0]; to.value=months[months.length-1]; }
 }
-function buildStateFilter(){
+function buildStateMs(){
   const states=uniq(ALL.map(r=>r.state).filter(Boolean)).sort();
-  const sel=document.getElementById('stateFilter');
-  sel.innerHTML='<option value="all">All states</option>'+states.map(s=>`<option value="${s}">${s}</option>`).join('');
-  sel.value='all';
+  const list=document.getElementById('stateMsList');
+  list.innerHTML=states.map(s=>`<label class="ms-item"><input type="checkbox" class="ms-state-cb" value="${s}"> ${s}</label>`).join('');
+  updateStateMsLabel();
+}
+function updateStateMsLabel(){
+  const btn=document.getElementById('stateMsBtn');
+  if(SELECTED_STATES.size===0) btn.textContent='All states';
+  else if(SELECTED_STATES.size===1) btn.textContent=[...SELECTED_STATES][0];
+  else btn.textContent=SELECTED_STATES.size+' states selected';
 }
 function applyFilters(){
-  const p=document.getElementById('period').value;
-  const st=document.getElementById('stateFilter').value;
-  ROWS=ALL.filter(r=>(p==='all'||r.month===p)&&(st==='all'||r.state===st));
+  const fromEl=document.getElementById('periodFrom'), toEl=document.getElementById('periodTo');
+  let from=fromEl.value, to=toEl.value;
+  if(from && to && from>to){ [from,to]=[to,from]; fromEl.value=from; toEl.value=to; } // swap if reversed
+  ROWS=ALL.filter(r=>{
+    const inRange = (!from||r.month>=from) && (!to||r.month<=to);
+    const inState = SELECTED_STATES.size===0 || SELECTED_STATES.has(r.state);
+    return inRange && inState;
+  });
+  const psub=document.getElementById('psub');
+  if(from && to){
+    psub.textContent = (from===to ? monthLabel(from) : monthLabel(from)+' – '+monthLabel(to)) +
+      (document.getElementById('dot').classList.contains('ok') ? ' · Live' : '');
+  }
   render();
 }
 
@@ -183,14 +201,14 @@ function healthColor(ratio,churned){ if(churned)return '#A6A6AE'; if(ratio>=0.95
 /* ---------- render dispatch ---------- */
 function render(){
   ({overview:renderOverview,restaurants:renderHealth,processing:renderProcessing,
-    margins:renderMargins,segments:renderSegments}[VIEW]||(()=>{}))();
+    margins:renderMargins,segments:renderSegments,roster:renderRoster}[VIEW]||(()=>{}))();
 }
 function card(label,value,extra='',cls=''){return `<div class="card"><div class="card-l">${label}</div><div class="card-v ${cls}">${value}</div>${extra?`<div class="card-d ${extra.cls||''}">${extra.txt||extra}</div>`:''}</div>`;}
 function upChart(id,cfg){if(CHARTS[id])CHARTS[id].destroy();const c=document.getElementById(id);if(c)CHARTS[id]=new Chart(c,cfg);}
 function baseOpts({stacked}={}){return{responsive:true,maintainAspectRatio:false,
   plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>' '+c.dataset.label+': '+(c.raw!=null?fmt(c.raw):'—')}}},
-  scales:{x:{stacked:!!stacked,grid:{display:false},ticks:{color:'#73737E',font:{size:11}}},
-    y:{stacked:!!stacked,grid:{color:'#EAEAE4'},ticks:{color:'#73737E',font:{size:11},callback:v=>'$'+(Math.abs(v)>=1000?(v/1000).toFixed(0)+'k':v)}}}};}
+  scales:{x:{stacked:!!stacked,grid:{display:false},ticks:{color:'#9C9CA8',font:{size:11}}},
+    y:{stacked:!!stacked,grid:{color:'rgba(255,255,255,.08)'},ticks:{color:'#9C9CA8',font:{size:11},callback:v=>'$'+(Math.abs(v)>=1000?(v/1000).toFixed(0)+'k':v)}}}};}
 
 /* ---------- Overview ---------- */
 function renderOverview(){
@@ -199,42 +217,100 @@ function renderOverview(){
   const restos=byRestaurant(ROWS);
   const active=restos.filter(r=>!/churn/i.test(r.status)).length, churn=restos.filter(r=>/churn/i.test(r.status)).length;
   document.getElementById('ov-cards').innerHTML=
-    card('Top-line revenue',fmt(tl))+card('SaaS',fmt(t.saas))+card('Payment processing',fmt(t.pp))+
+    card('Top-line revenue',fmt(tl)).replace('class="card"','class="card card-hero h-brand"')+
+    card('SaaS',fmt(t.saas)).replace('class="card"','class="card card-hero h-coral"')+
+    card('Payment processing',fmt(t.pp)).replace('class="card"','class="card card-hero h-teal"')+
     card('CAMP + Payroll',fmt(t.camp+t.payroll))+card('Uncollected revenue',fmt(owed),'',owed>0?'owed':'good')+
-    `<div class="card" style="cursor:pointer" onclick="showStatusList()"><div class="card-l">Active · Churned</div><div class="card-v">${active} · ${churn}</div><div class="card-d">click to view list</div></div>`;
+    `<div class="card" style="cursor:pointer" onclick="switchView('roster')"><div class="card-l">Active · Churned</div><div class="card-v">${active} · ${churn}</div><div class="card-d">click to view list</div></div>`;
 
   const months=uniq(ALL.map(r=>r.month)).sort();
   const fr=(typeof window!=='undefined')?ROWS:ROWS;
-  const st=document.getElementById('stateFilter').value;
-  const mRows=m=>ALL.filter(r=>r.month===m&&(st==='all'||r.state===st));
+  const mRows=m=>ALL.filter(r=>r.month===m&&(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
   const ds=STREAMS.map(s=>({label:s.label,data:months.map(m=>Math.round(sumK(mRows(m),s.key))),backgroundColor:s.color,borderRadius:3,stack:'a'}));
   document.getElementById('ov-legend').innerHTML=STREAMS.map(s=>`<span><i style="background:${s.color}"></i>${s.label}</span>`).join('');
   upChart('ovChart',{type:'bar',data:{labels:months.map(monthLabel),datasets:ds},options:baseOpts({stacked:true})});
 
   const split=STREAMS.map(s=>({label:s.label,v:t[s.key],c:s.color})).filter(x=>x.v>0);
-  upChart('ovSplit',{type:'doughnut',data:{labels:split.map(s=>s.label),datasets:[{data:split.map(s=>Math.round(s.v)),backgroundColor:split.map(s=>s.c),borderWidth:2,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:9,padding:9,font:{size:11},color:'#73737E'}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}});
+  upChart('ovSplit',{type:'doughnut',data:{labels:split.map(s=>s.label),datasets:[{data:split.map(s=>Math.round(s.v)),backgroundColor:split.map(s=>s.c),borderWidth:2,borderColor:'#1B3F4D'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:9,padding:9,font:{size:11},color:'#9C9CA8'}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}});
 
   // by state
-  const stateMap={};
+  const stateMap={}, stateCount={};
   ROWS.forEach(r=>{const k=r.state||'—';stateMap[k]=(stateMap[k]||0)+r.saas+r.pp+r.camp+r.payroll;});
+  byRestaurant(ROWS).forEach(o=>{const k=o.state||'—';stateCount[k]=(stateCount[k]||0)+1;});
   const ents=Object.entries(stateMap).sort((a,b)=>b[1]-a[1]);
   document.getElementById('ov-state').innerHTML=ents.map(([s,v],i)=>
-    `<div class="mini-item" style="cursor:pointer" onclick="showStateList('${escA(s)}')"><span class="nm"><span class="swatch" style="background:${PIE[i%PIE.length]}"></span><span class="t">${s}</span></span><span class="vl">${fmt(v)}</span></div>`).join('')||'<p class="note">No data.</p>';
+    `<div class="mini-item" style="cursor:pointer" onclick="showStateList('${escA(s)}')"><span class="nm"><span class="swatch" style="background:${PIE[i%PIE.length]}"></span><span class="t">${s}</span><small style="color:var(--muted);margin-left:6px">${stateCount[s]||0} restaurant${(stateCount[s]||0)===1?'':'s'}</small></span><span class="vl">${fmt(v)}</span></div>`).join('')||'<p class="note">No data.</p>';
+
+  /* --- 1. New restaurants this period --- */
+  const relevant = ALL.filter(r=>SELECTED_STATES.size===0||SELECTED_STATES.has(r.state));
+  const firstMonth={};
+  relevant.forEach(r=>{ if(!firstMonth[r.restaurant]||r.month<firstMonth[r.restaurant]) firstMonth[r.restaurant]=r.month; });
+  const from=document.getElementById('periodFrom').value, to=document.getElementById('periodTo').value;
+  const newNames=Object.entries(firstMonth).filter(([n,m])=>m>=from&&m<=to).map(([n])=>n);
+  const newRestos=restos.filter(o=>newNames.includes(o.restaurant))
+    .sort((a,b)=> firstMonth[a.restaurant].localeCompare(firstMonth[b.restaurant]) || a.restaurant.localeCompare(b.restaurant));
+  document.getElementById('ov-new').innerHTML = newRestos.length
+    ? newRestos.map((o,i)=>{const tl=o.saas+o.pp+o.camp+o.payroll;const loc=[o.city,o.state].filter(Boolean).join(', ');
+        return `<div class="mini-item" style="cursor:pointer" onclick="openDetail('${escA(o.restaurant)}')"><span class="nm"><span class="swatch" style="background:${PIE[i%PIE.length]}"></span><span class="t">${o.restaurant}</span><small style="color:var(--muted);margin-left:6px">since ${monthLabel(firstMonth[o.restaurant])}${loc?' · '+loc:''}</small></span><span class="vl">${fmt(tl)}</span></div>`;
+      }).join('')
+    : '<p class="note">No new restaurants in this period.</p>';
+
+  /* --- 2. Revenue concentration --- */
+  const rankedResto=restos.map(o=>({...o,tl:o.saas+o.pp+o.camp+o.payroll})).sort((a,b)=>b.tl-a.tl);
+  const top5=rankedResto.slice(0,5), top5sum=top5.reduce((s,o)=>s+o.tl,0);
+  const concPct = tl>0 ? (top5sum/tl*100) : 0;
+  document.getElementById('ov-concentration').innerHTML = `
+    <div style="font-family:var(--mono);font-size:26px;font-weight:500;margin-bottom:4px">${concPct.toFixed(0)}%</div>
+    <div class="note" style="margin-bottom:14px">of revenue comes from your top 5 restaurants</div>
+    ${top5.map((o,i)=>`<div class="mini-item"><span class="nm"><span class="swatch" style="background:${PIE[i%PIE.length]}"></span><span class="t">${o.restaurant}</span></span><span class="vl">${fmt(o.tl)}</span></div>`).join('')}`;
+
+  /* --- 3. Uncollected revenue by month --- */
+  const hrByMonth = months.map(m=>{
+    const mr = ALL.filter(r=>r.month===m && (SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
+    return healthRows(mr).reduce((s,r)=>s+r.owed,0);
+  });
+  upChart('ovUncollected',{type:'bar',data:{labels:months.map(monthLabel),datasets:[{label:'Uncollected',data:hrByMonth.map(Math.round),backgroundColor:'#E5675A',borderRadius:3}]},options:baseOpts()});
+
+  /* --- 4. Platform mix --- */
+  const platMap={};
+  restos.forEach(o=>{const k=o.platform||'Unknown';platMap[k]=(platMap[k]||0)+o.saas+o.pp+o.camp+o.payroll;});
+  const platEnts=Object.entries(platMap).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  upChart('ovPlatform',{type:'doughnut',data:{labels:platEnts.map(([k])=>k),datasets:[{data:platEnts.map(([,v])=>Math.round(v)),backgroundColor:platEnts.map((_,i)=>PIE[i%PIE.length]),borderWidth:2,borderColor:'#1B3F4D'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{boxWidth:9,padding:9,font:{size:11},color:'#9C9CA8'}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.raw)}}}}});
+
+  /* --- 5. Fee-to-revenue ratio (overall + by platform) --- */
+  const feeByPlat={}, grossByPlat={};
+  restos.forEach(o=>{const k=o.platform||'Unknown';feeByPlat[k]=(feeByPlat[k]||0)+o.fees;grossByPlat[k]=(grossByPlat[k]||0)+o.gross;});
+  const totalFees=Object.values(feeByPlat).reduce((s,v)=>s+v,0), totalGross=Object.values(grossByPlat).reduce((s,v)=>s+v,0);
+  const overallRatio = totalGross>0 ? (totalFees/totalGross*100) : 0;
+  const platRows=Object.keys(grossByPlat).filter(k=>grossByPlat[k]>0).sort((a,b)=>grossByPlat[b]-grossByPlat[a])
+    .map(k=>`<div class="mini-item"><span class="nm"><span class="t">${k}</span></span><span class="vl">${(grossByPlat[k]>0?(feeByPlat[k]/grossByPlat[k]*100):0).toFixed(2)}%</span></div>`).join('');
+  document.getElementById('ov-feeratio').innerHTML = `
+    <div style="font-family:var(--mono);font-size:26px;font-weight:500;margin-bottom:4px">${overallRatio.toFixed(2)}%</div>
+    <div class="note" style="margin-bottom:14px">of SaaS revenue goes to processing fees</div>
+    ${platRows}`;
 }
 
 /* ---------- Active/Churned + State drill-downs ---------- */
-function showStatusList(){
+/* ---------- Restaurants roster (active / churned) ---------- */
+function renderRoster(){
   const restos=byRestaurant(ROWS);
-  const active=restos.filter(r=>!/churn/i.test(r.status)).sort((a,b)=>a.restaurant.localeCompare(b.restaurant));
-  const churned=restos.filter(r=>/churn/i.test(r.status)).sort((a,b)=>a.restaurant.localeCompare(b.restaurant));
+  const active=restos.filter(r=>!/churn/i.test(r.status));
+  const churned=restos.filter(r=>/churn/i.test(r.status));
+  document.getElementById('ro-cards').innerHTML=
+    card('Active',active.length,'',
+    )+card('Churned',churned.length)+card('Total restaurants',restos.length);
+  drawRoster(active,churned);
+}
+function drawRoster(active,churned){
+  const q=(document.getElementById('ro-search').value||'').toLowerCase();
   const row=o=>{const tl=o.saas+o.pp+o.camp+o.payroll;const loc=[o.city,o.state].filter(Boolean).join(', ');
-    return `<div class="mini-item" style="cursor:pointer" onclick="closeListModal();openDetail('${escA(o.restaurant)}')"><span class="nm"><span class="t">${o.restaurant}</span></span><span class="vl">${fmt(tl)}<small> ${loc}</small></span></div>`;};
-  const html=`<div class="panel-h"><span class="panel-t">Active (${active.length})</span></div>
-    <div class="mini-list">${active.map(row).join('')||'<p class="note">None.</p>'}</div>
-    <div class="panel-h" style="margin-top:18px"><span class="panel-t">Churned (${churned.length})</span></div>
-    <div class="mini-list">${churned.map(row).join('')||'<p class="note">None.</p>'}</div>`;
-  openListModal('Active vs. churned restaurants', html);
+    return `<div class="mini-item" style="cursor:pointer" onclick="openDetail('${escA(o.restaurant)}')"><span class="nm"><span class="t">${o.restaurant}</span></span><span class="vl">${fmt(tl)}<small>${loc}</small></span></div>`;};
+  const activeF=active.filter(o=>o.restaurant.toLowerCase().includes(q)).sort((a,b)=>a.restaurant.localeCompare(b.restaurant));
+  const churnedF=churned.filter(o=>o.restaurant.toLowerCase().includes(q)).sort((a,b)=>a.restaurant.localeCompare(b.restaurant));
+  document.getElementById('ro-active').innerHTML=activeF.map(row).join('')||'<p class="note">None match.</p>';
+  document.getElementById('ro-churned').innerHTML=churnedF.map(row).join('')||'<p class="note">None.</p>';
 }
 function showStateList(state){
   const restos=byRestaurant(ROWS).filter(o=>o.state===state).sort((a,b)=>(b.saas+b.pp+b.camp+b.payroll)-(a.saas+a.pp+a.camp+a.payroll));
@@ -247,9 +323,9 @@ function showStateList(state){
 function openListModal(title, html){
   document.getElementById('listModalTitle').textContent=title;
   document.getElementById('listModalBody').innerHTML=html;
-  document.getElementById('listModal').hidden=false;
+  document.getElementById('listModal').classList.add('open');
 }
-function closeListModal(){document.getElementById('listModal').hidden=true;}
+function closeListModal(){document.getElementById('listModal').classList.remove('open');}
 
 /* ---------- Restaurant health ---------- */
 function renderHealth(){
@@ -294,9 +370,8 @@ function renderProcessing(){
     card('Payment Processing Revenue',fmt(totRev))+card('Processed volume',fmt(totVol))+
     card('Effective take-rate',take.toFixed(2)+'%')+card('Restaurants',all.length);
   const months=uniq(ALL.map(r=>r.month)).sort();
-  const st=document.getElementById('stateFilter').value;
   upChart('ppChart',{type:'bar',data:{labels:months.map(monthLabel),datasets:[{label:'PP Revenue',
-    data:months.map(m=>Math.round(sumK(ALL.filter(r=>r.month===m&&(st==='all'||r.state===st)),'pp'))),backgroundColor:'#B5790E',borderRadius:3}]},options:baseOpts()});
+    data:months.map(m=>Math.round(sumK(ALL.filter(r=>r.month===m&&(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))),'pp'))),backgroundColor:'#B5790E',borderRadius:3}]},options:baseOpts()});
   document.getElementById('pp-list').innerHTML=pr.slice(0,15).map((r,i)=>{
     const tr=r.volume>0?(r.pp/r.volume*100).toFixed(2)+'%':'—';
     return `<div class="mini-item" style="cursor:pointer" onclick="openDetail('${escA(r.restaurant)}')">
@@ -408,6 +483,8 @@ function exportCurrent(){
     byRestaurant(ROWS).filter(o=>o.pp>0).sort((a,b)=>b.pp-a.pp).forEach(o=>rows.push({Restaurant:o.restaurant,City:o.city,State:o.state,'PP Revenue':o.pp,Volume:o.volume,'Take rate %':o.volume>0?+(o.pp/o.volume*100).toFixed(2):0}));
   } else if(VIEW==='margins'){
     byRestaurant(ROWS).forEach(o=>{const tl=o.saas+o.pp+o.camp+o.payroll;rows.push({Restaurant:o.restaurant,'Top-line':tl,Fees:o.fees,Hardware:o.hardware,Contribution:tl-o.fees-o.hardware});});
+  } else if(VIEW==='roster'){
+    byRestaurant(ROWS).forEach(o=>rows.push({Restaurant:o.restaurant,Status:/churn/i.test(o.status)?'Churned':'Active',City:o.city,State:o.state,'Top-line':o.saas+o.pp+o.camp+o.payroll}));
   } else if(VIEW==='segments'){
     byRestaurant(ROWS).forEach(o=>{const s=o.saas>0,p=o.pp>0;rows.push({Restaurant:o.restaurant,Segment:s&&p?'Both':s?'SaaS only':p?'PP only':'None',SaaS:o.saas,'Payment Processing':o.pp,Payroll:o.payroll});});
   } else { // overview / forecast
@@ -416,7 +493,7 @@ function exportCurrent(){
   if(!rows.length){alert('Nothing to export in this view.');return;}
   const ws=XLSX.utils.json_to_sheet(rows), wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Export');
-  const period=document.getElementById('period').value;
+  const period=(document.getElementById('periodFrom').value+'_to_'+document.getElementById('periodTo').value);
   XLSX.writeFile(wb,`dashboard_${name}_${period}.xlsx`);
 }
 
@@ -424,21 +501,41 @@ function exportCurrent(){
 function setSync(ok,txt){document.getElementById('dot').className='dot '+(ok?'ok':'err');document.getElementById('syncText').textContent=txt;}
 function showErr(h){const e=document.getElementById('err');e.hidden=false;e.innerHTML=h;}
 function hideErr(){document.getElementById('err').hidden=true;}
-const TITLES={overview:'Overview',restaurants:'Restaurant health',processing:'Payment processing',margins:'Margins',segments:'Segments'};
+const TITLES={overview:'Overview',restaurants:'Restaurant health',processing:'Payment processing',margins:'Margins',segments:'Segments',roster:'Restaurants'};
+function switchView(key){
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const btn=document.querySelector(`.nav-item[data-view="${key}"]`); if(btn)btn.classList.add('active');
+  VIEW=key;
+  document.getElementById('v-'+VIEW).classList.add('active');
+  document.getElementById('ptitle').textContent=TITLES[VIEW]||''; render();
+}
 function boot(){
   if(typeof CONFIG!=='undefined'&&CONFIG.BRAND){document.getElementById('brandName').textContent=CONFIG.BRAND;document.title=CONFIG.BRAND;}
-  document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>{
-    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    b.classList.add('active'); VIEW=b.dataset.view;
-    document.getElementById('v-'+VIEW).classList.add('active');
-    document.getElementById('ptitle').textContent=TITLES[VIEW]; render();
-  }));
-  document.getElementById('period').addEventListener('change',applyFilters);
-  document.getElementById('stateFilter').addEventListener('change',applyFilters);
+  document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
+  document.getElementById('periodFrom').addEventListener('change',applyFilters);
+  document.getElementById('periodTo').addEventListener('change',applyFilters);
+  // multi-select state dropdown
+  const msBtn=document.getElementById('stateMsBtn'), msPanel=document.getElementById('stateMsPanel'), msAll=document.getElementById('stateMsAll');
+  msBtn.addEventListener('click',e=>{e.stopPropagation();msPanel.hidden=!msPanel.hidden;});
+  document.addEventListener('click',e=>{if(!document.getElementById('stateMsWrap').contains(e.target))msPanel.hidden=true;});
+  msAll.addEventListener('change',()=>{
+    if(msAll.checked){SELECTED_STATES.clear();document.querySelectorAll('.ms-state-cb').forEach(cb=>cb.checked=false);}
+    updateStateMsLabel();applyFilters();
+  });
+  document.getElementById('stateMsList').addEventListener('change',e=>{
+    if(!e.target.classList.contains('ms-state-cb'))return;
+    if(e.target.checked)SELECTED_STATES.add(e.target.value); else SELECTED_STATES.delete(e.target.value);
+    msAll.checked = SELECTED_STATES.size===0;
+    updateStateMsLabel();applyFilters();
+  });
   document.getElementById('refreshBtn').addEventListener('click',loadData);
   document.getElementById('rh-search').addEventListener('input',()=>drawHealthList(healthRows(ROWS)));
   document.getElementById('rh-sort').addEventListener('change',()=>drawHealthList(healthRows(ROWS)));
+  document.getElementById('ro-search').addEventListener('input',()=>{
+    const restos=byRestaurant(ROWS);
+    drawRoster(restos.filter(r=>!/churn/i.test(r.status)), restos.filter(r=>/churn/i.test(r.status)));
+  });
   document.getElementById('seg-payroll').addEventListener('change',renderSegments);
   document.getElementById('exportBtn').addEventListener('click',exportCurrent);
   document.getElementById('detailExport').addEventListener('click',exportCurrent);

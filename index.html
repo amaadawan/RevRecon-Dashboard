@@ -6,7 +6,7 @@
   <title>DASHBOARD</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -36,6 +36,7 @@
         <button class="nav-item" data-view="processing"><span class="nav-ico">⇄</span>Payment processing</button>
         <button class="nav-item" data-view="margins"><span class="nav-ico">▤</span>Margins</button>
         <button class="nav-item" data-view="segments"><span class="nav-ico">⊞</span>Segments</button>
+        <button class="nav-item" data-view="roster"><span class="nav-ico">☰</span>Restaurants</button>
       </nav>
       <div class="side-foot">
         <div class="sync"><span class="dot" id="dot"></span><span id="syncText">Connecting…</span></div>
@@ -47,9 +48,20 @@
       <header class="topbar">
         <div><h2 class="ptitle" id="ptitle">Overview</h2><p class="psub" id="psub">—</p></div>
         <div class="topbar-right">
-          <select id="stateFilter" class="period" title="Filter by state"></select>
-          <select id="period" class="period"></select>
-          <button class="export-btn" id="exportBtn" title="Export current view to Excel">⭳ Export</button>
+          <div class="range-group">
+          <select id="periodFrom" class="period" title="From month"></select>
+          <span class="range-sep">→</span>
+          <select id="periodTo" class="period" title="To month"></select>
+        </div>
+        <div class="ms-wrap" id="stateMsWrap">
+          <button class="period ms-btn" id="stateMsBtn" type="button">All states</button>
+          <div class="ms-panel" id="stateMsPanel" hidden>
+            <label class="ms-item ms-all"><input type="checkbox" id="stateMsAll" checked> All states</label>
+            <div class="ms-divider"></div>
+            <div id="stateMsList"></div>
+          </div>
+        </div>
+        <button class="export-btn" id="exportBtn" title="Export current view to Excel">⭳ Export</button>
         </div>
       </header>
 
@@ -65,12 +77,39 @@
           </div>
           <div class="panel">
             <div class="panel-h"><span class="panel-t">Stream split</span></div>
-            <div class="cv cv-sm"><canvas id="ovSplit"></canvas></div>
+            <div class="cv cv-sm donut-wrap"><canvas id="ovSplit"></canvas><div class="donut-center">💰</div></div>
           </div>
         </div>
         <div class="panel">
           <div class="panel-h"><span class="panel-t">Revenue by state</span></div>
           <div id="ov-state" class="mini-list"></div>
+        </div>
+
+        <div class="row">
+          <div class="panel">
+            <div class="panel-h"><span class="panel-t">New restaurants this period</span></div>
+            <div id="ov-new" class="mini-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-h"><span class="panel-t">Revenue concentration</span></div>
+            <div id="ov-concentration"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-h"><span class="panel-t">Uncollected revenue by month</span></div>
+          <div class="cv"><canvas id="ovUncollected"></canvas></div>
+        </div>
+
+        <div class="row">
+          <div class="panel">
+            <div class="panel-h"><span class="panel-t">Platform mix</span></div>
+            <div class="cv cv-sm"><canvas id="ovPlatform"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="panel-h"><span class="panel-t">Fee-to-revenue ratio</span></div>
+            <div id="ov-feeratio"></div>
+          </div>
         </div>
       </section>
 
@@ -132,6 +171,22 @@
           <div id="seg-list" class="mini-list"></div>
         </div>
       </section>
+
+      <!-- Restaurants (active / churned roster) -->
+      <section class="view" id="v-roster">
+        <div class="cards" id="ro-cards"></div>
+        <div class="panel">
+          <div class="panel-h">
+            <span class="panel-t">Active</span>
+            <input type="search" id="ro-search" class="search" placeholder="Search restaurant…" />
+          </div>
+          <div id="ro-active" class="mini-list"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><span class="panel-t">Churned</span></div>
+          <div id="ro-churned" class="mini-list"></div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -145,7 +200,7 @@
   </div>
 
   <!-- Active/Churned + State drill-down modal -->
-  <div id="listModal" class="list-modal" hidden>
+  <div id="listModal" class="list-modal">
     <div class="list-modal-card">
       <div class="list-modal-head">
         <span id="listModalTitle" class="panel-t"></span>
