@@ -215,7 +215,7 @@ function healthColor(ratio,churned){ if(churned)return '#A6A6AE'; if(ratio>=0.95
 /* ---------- render dispatch ---------- */
 function render(){
   ({overview:renderOverview,restaurants:renderHealth,processing:renderProcessing,
-    margins:renderMargins,segments:renderSegments,roster:renderRoster}[VIEW]||(()=>{}))();
+    margins:renderMargins,segments:renderSegments,roster:renderRoster,profitability:renderProfitability}[VIEW]||(()=>{}))();
 }
 function card(label,value,extra='',cls=''){return `<div class="card"><div class="card-l">${label}</div><div class="card-v ${cls}">${value}</div>${extra?`<div class="card-d ${extra.cls||''}">${extra.txt||extra}</div>`:''}</div>`;}
 function upChart(id,cfg){if(CHARTS[id])CHARTS[id].destroy();const c=document.getElementById(id);if(c)CHARTS[id]=new Chart(c,cfg);}
@@ -306,16 +306,16 @@ function renderOverview(){
   const totalFees=Object.values(feeByPlat).reduce((s,v)=>s+v,0), totalGross=Object.values(grossByPlat).reduce((s,v)=>s+v,0);
   const overallRatio = totalGross>0 ? (totalFees/totalGross*100) : 0;
   const platRows=Object.keys(grossByPlat).filter(k=>grossByPlat[k]>0).sort((a,b)=>grossByPlat[b]-grossByPlat[a])
-    .map(k=>{const pct=grossByPlat[k]>0?(feeByPlat[k]/grossByPlat[k]*100):0;
-      return `<div class="fee-plat-row" style="cursor:pointer" onclick="showFeeBreakdown('${escA(k)}')">
+    .map((k,i)=>{const pct=grossByPlat[k]>0?(feeByPlat[k]/grossByPlat[k]*100):0; const col=PIE[i%PIE.length];
+      return `<div class="fee-plat-card" style="cursor:pointer;border-left-color:${col}" onclick="showFeeBreakdown('${escA(k)}')">
         <div class="fee-plat-name">${k}</div>
-        <div class="fee-plat-pct">${pct.toFixed(2)}%</div>
-        <div class="fee-plat-sub">${fmt(feeByPlat[k])} fees on ${fmt(grossByPlat[k])} gross</div>
+        <div class="fee-plat-pct" style="color:${col}">${pct.toFixed(2)}%</div>
+        <div class="fee-plat-sub">${fmt(feeByPlat[k])} fees · ${fmt(grossByPlat[k])} gross</div>
       </div>`;}).join('');
   document.getElementById('ov-feeratio').innerHTML = `
-    <div class="note" style="margin-bottom:10px">fees ÷ gross revenue, per platform — click any row for restaurant detail</div>
-    ${platRows}
-    <div class="fee-blended">Blended average across all platforms: <b onclick="showFeeBreakdown()" style="cursor:pointer;color:var(--ink)">${overallRatio.toFixed(2)}%</b></div>`;
+    <div class="note" style="margin-bottom:12px">fees ÷ gross revenue, per platform — click a card for restaurant detail</div>
+    <div class="fee-grid">${platRows}</div>
+    <div class="fee-blended">Blended average across all platforms&nbsp; <b onclick="showFeeBreakdown()" style="cursor:pointer;color:var(--ink)">${overallRatio.toFixed(2)}%</b></div>`;
 }
 
 /* ---------- Active/Churned + State drill-downs ---------- */
@@ -471,7 +471,92 @@ function renderMargins(){
     `<tr class="total"><td>Total</td><td class="num">${fmt(tl)}</td><td class="num neg">-${fmt(t.fees)}</td><td class="num neg">-${fmt(t.hardware)}</td><td class="num ${contribution>=0?'pos':'neg'}">${fmt(contribution)}</td></tr>`;
 }
 
-/* ---------- Segments ---------- */
+/* ---------- Profitability ---------- */
+function renderProfitability(){
+  const t=totals(ROWS), tl=topLine(t);
+  const months=uniq(ALL.map(r=>r.month)).sort();
+  const contribution=tl-t.fees-t.hardware;
+  const marginPct = tl>0 ? (contribution/tl*100) : 0;
+  const volRows=ROWS.filter(r=>r.volume>0);
+  const ppWithVol=sumK(volRows,'pp'), volWithVol=sumK(volRows,'volume');
+  const ppTakeRate = volWithVol>0 ? (ppWithVol/volWithVol*100) : 0;
+  const restos=byRestaurant(ROWS).map(o=>({...o,tl:o.saas+o.pp+o.camp+o.payroll,contrib:(o.saas+o.pp+o.camp+o.payroll)-o.fees-o.hardware}));
+  const atRisk=restos.filter(o=>o.contrib<0);
+
+  document.getElementById('pr-cards').innerHTML=
+    card('Contribution margin',fmt(contribution),'',contribution>=0?'good':'owed')+
+    card('Margin %',marginPct.toFixed(1)+'%','',marginPct>=0?'good':'owed')+
+    card('Payment processing earnings',fmt(t.pp))+
+    card('Blended take-rate',ppTakeRate.toFixed(2)+'%')+
+    card('At-risk restaurants',atRisk.length,'',atRisk.length>0?'owed':'good');
+
+  /* 1. Contribution margin by month */
+  const filt=r=>(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform));
+  const contribByMonth=months.map(m=>{
+    const mr=ALL.filter(r=>r.month===m&&filt(r)); const mt=totals(mr); const mtl=topLine(mt);
+    return {dollar:mtl-mt.fees-mt.hardware, pct: mtl>0?((mtl-mt.fees-mt.hardware)/mtl*100):0};
+  });
+  upChart('prContribChart',{type:'bar',data:{labels:months.map(monthLabel),datasets:[{label:'Contribution ($)',data:contribByMonth.map(c=>Math.round(c.dollar)),backgroundColor:'#3FBE82',borderRadius:3,yAxisID:'y'}]},
+    options:{...baseOpts(),
+      onClick:(evt,els)=>{ if(els.length) showMonthProfitBreakdown(months[els[0].index]); }}});
+
+  /* 2. PP take-rate trend */
+  const takeRateByMonth=months.map(m=>{
+    const mr=ALL.filter(r=>r.month===m&&filt(r)); const mp=sumK(mr,'pp'), mv=sumK(mr,'volume');
+    return mv>0?(mp/mv*100):0;
+  });
+  upChart('prTakeRateChart',{type:'line',data:{labels:months.map(monthLabel),datasets:[{label:'Take-rate %',data:takeRateByMonth.map(v=>+v.toFixed(2)),borderColor:'#93C7D4',backgroundColor:'rgba(147,199,212,.15)',fill:true,tension:.3,pointRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw+'%'}}},
+      scales:{x:{grid:{display:false},ticks:{color:'#9C9CA8',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,.08)'},ticks:{color:'#9C9CA8',font:{size:11},callback:v=>v+'%'}}}}});
+
+  /* 3. Most / least profitable */
+  const ranked=restos.slice().sort((a,b)=>b.contrib-a.contrib);
+  const rowHtml=o=>`<div class="mini-item" style="cursor:pointer" onclick="openDetail('${escA(o.restaurant)}')"><span class="nm"><span class="t">${o.restaurant}</span></span><span class="vl" style="${o.contrib<0?'color:var(--red)':''}">${fmt(o.contrib)}</span></div>`;
+  document.getElementById('pr-top').innerHTML = ranked.slice(0,6).map(rowHtml).join('') || '<p class="note">No data.</p>';
+  document.getElementById('pr-bottom').innerHTML = ranked.slice(-6).reverse().map(rowHtml).join('') || '<p class="note">No data.</p>';
+
+  /* 4. Margin by platform */
+  const platGross={}, platFees={}, platHw={}, platTl={};
+  restos.forEach(o=>{const k=o.platform||'Unknown'; platTl[k]=(platTl[k]||0)+o.tl; platFees[k]=(platFees[k]||0)+o.fees; platHw[k]=(platHw[k]||0)+o.hardware;});
+  const platMarginRows=Object.keys(platTl).filter(k=>platTl[k]>0).sort((a,b)=>platTl[b]-platTl[a])
+    .map((k,i)=>{const c=platTl[k]-platFees[k]-platHw[k]; const pct=platTl[k]>0?(c/platTl[k]*100):0; const col=PIE[i%PIE.length];
+      return `<div class="fee-plat-card" style="border-left-color:${col}"><div class="fee-plat-name">${k}</div><div class="fee-plat-pct" style="color:${col}">${pct.toFixed(1)}%</div><div class="fee-plat-sub">${fmt(c)} contribution on ${fmt(platTl[k])} top-line</div></div>`;}).join('');
+  document.getElementById('pr-platform-margin').innerHTML = `<div class="fee-grid">${platMarginRows}</div>`;
+
+  /* 5. Hardware payback period */
+  const hwRestos = uniq(ALL.map(r=>r.restaurant)).map(name=>{
+    const allRows=ALL.filter(r=>r.restaurant===name);
+    const hw = allRows.reduce((s,r)=>s+(+r.hardware||0),0);
+    if(hw<=0) return null;
+    const monthsPresent = uniq(allRows.map(r=>r.month)).length;
+    const totalRev = allRows.reduce((s,r)=>s+(+r.saas||0)+(+r.pp||0)+(+r.camp||0)+(+r.payroll||0),0);
+    const avgMonthly = monthsPresent>0 ? totalRev/monthsPresent : 0;
+    const payback = avgMonthly>0 ? hw/avgMonthly : Infinity;
+    return {name, hw, avgMonthly, payback};
+  }).filter(Boolean).sort((a,b)=>a.payback-b.payback);
+  document.getElementById('pr-payback').innerHTML = hwRestos.length ? hwRestos.map(o=>
+    `<div class="mini-item" style="cursor:pointer" onclick="openDetail('${escA(o.name)}')"><span class="nm"><span class="t">${o.name}</span><small style="color:var(--muted);margin-left:6px">${fmt(o.hw)} hardware · ${fmt(o.avgMonthly)}/mo avg</small></span><span class="vl">${isFinite(o.payback)?o.payback.toFixed(1)+' mo':'n/a'}</span></div>`
+  ).join('') : '<p class="note">No hardware cost data recorded.</p>';
+
+  /* 6. At-risk restaurants */
+  document.getElementById('pr-atrisk').innerHTML = atRisk.length
+    ? atRisk.sort((a,b)=>a.contrib-b.contrib).map(o=>
+        `<div class="mini-item" style="cursor:pointer" onclick="openDetail('${escA(o.restaurant)}')"><span class="nm"><span class="t">${o.restaurant}</span></span><span class="vl" style="color:var(--red)">${fmt(o.contrib)}</span></div>`
+      ).join('')
+    : '<p class="note">No restaurants are currently running a negative contribution.</p>';
+}
+function showMonthProfitBreakdown(m){
+  const filt=r=>(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform));
+  const mr=ALL.filter(r=>r.month===m&&filt(r));
+  const items=byRestaurant(mr).map(o=>({name:o.restaurant,label:o.restaurant,num:(o.saas+o.pp+o.camp+o.payroll)-o.fees-o.hardware,sub:[o.city,o.state].filter(Boolean).join(', ')}))
+    .filter(x=>x.num!==0).sort((a,b)=>b.num-a.num).map(x=>({name:x.name,label:x.label,value:fmt(x.num),sub:x.sub}));
+  showBreakdown('Contribution — '+monthLabel(m), items);
+}
+function showFullProfitRanking(top){
+  const restos=byRestaurant(ROWS).map(o=>({name:o.restaurant,label:o.restaurant,num:(o.saas+o.pp+o.camp+o.payroll)-o.fees-o.hardware,sub:[o.city,o.state].filter(Boolean).join(', ')}));
+  const sorted = top ? restos.sort((a,b)=>b.num-a.num) : restos.sort((a,b)=>a.num-b.num);
+  showBreakdown(top?'Most profitable — full list':'Least profitable — full list', sorted.map(x=>({name:x.name,label:x.label,value:fmt(x.num),sub:x.sub})));
+}
 function renderSegments(){
   const payrollOnly=document.getElementById('seg-payroll').checked;
   let restos=byRestaurant(ROWS); if(payrollOnly) restos=restos.filter(o=>o.payroll>0);
@@ -559,6 +644,8 @@ function exportCurrent(){
     byRestaurant(ROWS).forEach(o=>{const tl=o.saas+o.pp+o.camp+o.payroll;rows.push({Restaurant:o.restaurant,'Top-line':tl,Fees:o.fees,Hardware:o.hardware,Contribution:tl-o.fees-o.hardware});});
   } else if(VIEW==='roster'){
     byRestaurant(ROWS).forEach(o=>rows.push({Restaurant:o.restaurant,Status:/churn/i.test(o.status)?'Churned':'Active',City:o.city,State:o.state,'Top-line':o.saas+o.pp+o.camp+o.payroll}));
+  } else if(VIEW==='profitability'){
+    byRestaurant(ROWS).forEach(o=>{const tl=o.saas+o.pp+o.camp+o.payroll;rows.push({Restaurant:o.restaurant,'Top-line':tl,Fees:o.fees,Hardware:o.hardware,Contribution:tl-o.fees-o.hardware,'PP Revenue':o.pp,Volume:o.volume,'Take rate %':o.volume>0?+(o.pp/o.volume*100).toFixed(2):0});});
   } else if(VIEW==='segments'){
     byRestaurant(ROWS).forEach(o=>{const s=o.saas>0,p=o.pp>0;rows.push({Restaurant:o.restaurant,Segment:s&&p?'Both':s?'SaaS only':p?'PP only':'None',SaaS:o.saas,'Payment Processing':o.pp,Payroll:o.payroll});});
   } else { // overview / forecast
@@ -575,7 +662,7 @@ function exportCurrent(){
 function setSync(ok,txt){document.getElementById('dot').className='dot '+(ok?'ok':'err');document.getElementById('syncText').textContent=txt;}
 function showErr(h){const e=document.getElementById('err');e.hidden=false;e.innerHTML=h;}
 function hideErr(){document.getElementById('err').hidden=true;}
-const TITLES={overview:'Overview',restaurants:'Restaurant health',processing:'Payment processing',margins:'Margins',segments:'Segments',roster:'Restaurants'};
+const TITLES={overview:'Overview',restaurants:'Restaurant health',processing:'Payment processing',margins:'Margins',segments:'Segments',roster:'Restaurants',profitability:'Profitability'};
 function switchView(key){
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
