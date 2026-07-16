@@ -123,7 +123,8 @@ function mapRow(r){
 
 /* ---------- after load ---------- */
 let SELECTED_STATES = new Set(); // empty = all states
-function afterLoad(){ buildPeriod(); buildStateMs(); applyFilters(); }
+let SELECTED_PLATFORMS = new Set(); // empty = all platforms
+function afterLoad(){ buildPeriod(); buildStateMs(); buildPlatformMs(); applyFilters(); }
 function buildPeriod(){
   const months=uniq(ALL.map(r=>r.month)).sort();
   const from=document.getElementById('periodFrom'), to=document.getElementById('periodTo');
@@ -143,6 +144,18 @@ function updateStateMsLabel(){
   else if(SELECTED_STATES.size===1) btn.textContent=[...SELECTED_STATES][0];
   else btn.textContent=SELECTED_STATES.size+' states selected';
 }
+function buildPlatformMs(){
+  const plats=uniq(ALL.map(r=>r.platform).filter(Boolean)).sort();
+  const list=document.getElementById('platMsList');
+  list.innerHTML=plats.map(p=>`<label class="ms-item"><input type="checkbox" class="ms-plat-cb" value="${p}"> ${p}</label>`).join('');
+  updatePlatformMsLabel();
+}
+function updatePlatformMsLabel(){
+  const btn=document.getElementById('platMsBtn');
+  if(SELECTED_PLATFORMS.size===0) btn.textContent='All platforms';
+  else if(SELECTED_PLATFORMS.size===1) btn.textContent=[...SELECTED_PLATFORMS][0];
+  else btn.textContent=SELECTED_PLATFORMS.size+' platforms selected';
+}
 function applyFilters(){
   const fromEl=document.getElementById('periodFrom'), toEl=document.getElementById('periodTo');
   let from=fromEl.value, to=toEl.value;
@@ -150,7 +163,8 @@ function applyFilters(){
   ROWS=ALL.filter(r=>{
     const inRange = (!from||r.month>=from) && (!to||r.month<=to);
     const inState = SELECTED_STATES.size===0 || SELECTED_STATES.has(r.state);
-    return inRange && inState;
+    const inPlat = SELECTED_PLATFORMS.size===0 || SELECTED_PLATFORMS.has(r.platform);
+    return inRange && inState && inPlat;
   });
   const psub=document.getElementById('psub');
   if(from && to){
@@ -226,7 +240,7 @@ function renderOverview(){
 
   const months=uniq(ALL.map(r=>r.month)).sort();
   const fr=(typeof window!=='undefined')?ROWS:ROWS;
-  const mRows=m=>ALL.filter(r=>r.month===m&&(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
+  const mRows=m=>ALL.filter(r=>r.month===m&&((SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform))));
   const ds=STREAMS.map(s=>({label:s.label,data:months.map(m=>Math.round(sumK(mRows(m),s.key))),backgroundColor:s.color,borderRadius:3,stack:'a'}));
   document.getElementById('ov-legend').innerHTML=STREAMS.map(s=>`<span><i style="background:${s.color}"></i>${s.label}</span>`).join('');
   upChart('ovChart',{type:'bar',data:{labels:months.map(monthLabel),datasets:ds},options:{...baseOpts({stacked:true}),
@@ -247,7 +261,7 @@ function renderOverview(){
     `<div class="mini-item" style="cursor:pointer" onclick="showStateList('${escA(s)}')"><span class="nm"><span class="swatch" style="background:${PIE[i%PIE.length]}"></span><span class="t">${s}</span><small style="color:var(--muted);margin-left:6px">${stateCount[s]||0} restaurant${(stateCount[s]||0)===1?'':'s'}</small></span><span class="vl">${fmt(v)}</span></div>`).join('')||'<p class="note">No data.</p>';
 
   /* --- 1. New restaurants this period --- */
-  const relevant = ALL.filter(r=>SELECTED_STATES.size===0||SELECTED_STATES.has(r.state));
+  const relevant = ALL.filter(r=>(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform)));
   const firstMonth={};
   relevant.forEach(r=>{ if(!firstMonth[r.restaurant]||r.month<firstMonth[r.restaurant]) firstMonth[r.restaurant]=r.month; });
   const from=document.getElementById('periodFrom').value, to=document.getElementById('periodTo').value;
@@ -271,7 +285,7 @@ function renderOverview(){
 
   /* --- 3. Uncollected revenue by month --- */
   const hrByMonth = months.map(m=>{
-    const mr = ALL.filter(r=>r.month===m && (SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
+    const mr = ALL.filter(r=>r.month===m && ((SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform))));
     return healthRows(mr).reduce((s,r)=>s+r.owed,0);
   });
   upChart('ovUncollected',{type:'bar',data:{labels:months.map(monthLabel),datasets:[{label:'Uncollected',data:hrByMonth.map(Math.round),backgroundColor:'#E5675A',borderRadius:3}]},options:{...baseOpts(),
@@ -292,11 +306,16 @@ function renderOverview(){
   const totalFees=Object.values(feeByPlat).reduce((s,v)=>s+v,0), totalGross=Object.values(grossByPlat).reduce((s,v)=>s+v,0);
   const overallRatio = totalGross>0 ? (totalFees/totalGross*100) : 0;
   const platRows=Object.keys(grossByPlat).filter(k=>grossByPlat[k]>0).sort((a,b)=>grossByPlat[b]-grossByPlat[a])
-    .map(k=>`<div class="mini-item" style="cursor:pointer" onclick="showFeeBreakdown('${escA(k)}')"><span class="nm"><span class="t">${k}</span></span><span class="vl">${(grossByPlat[k]>0?(feeByPlat[k]/grossByPlat[k]*100):0).toFixed(2)}%</span></div>`).join('');
+    .map(k=>{const pct=grossByPlat[k]>0?(feeByPlat[k]/grossByPlat[k]*100):0;
+      return `<div class="fee-plat-row" style="cursor:pointer" onclick="showFeeBreakdown('${escA(k)}')">
+        <div class="fee-plat-name">${k}</div>
+        <div class="fee-plat-pct">${pct.toFixed(2)}%</div>
+        <div class="fee-plat-sub">${fmt(feeByPlat[k])} fees on ${fmt(grossByPlat[k])} gross</div>
+      </div>`;}).join('');
   document.getElementById('ov-feeratio').innerHTML = `
-    <div style="font-family:var(--mono);font-size:26px;font-weight:700;margin-bottom:4px;cursor:pointer" onclick="showFeeBreakdown()">${overallRatio.toFixed(2)}%</div>
-    <div class="note" style="margin-bottom:14px">of SaaS revenue goes to processing fees · click any row for detail</div>
-    ${platRows}`;
+    <div class="note" style="margin-bottom:10px">fees ÷ gross revenue, per platform — click any row for restaurant detail</div>
+    ${platRows}
+    <div class="fee-blended">Blended average across all platforms: <b onclick="showFeeBreakdown()" style="cursor:pointer;color:var(--ink)">${overallRatio.toFixed(2)}%</b></div>`;
 }
 
 /* ---------- Active/Churned + State drill-downs ---------- */
@@ -360,11 +379,11 @@ function showUncollectedBreakdown(){
 }
 function showConcentrationBreakdown(){ showBreakdown('Revenue concentration — full list', restoBreakdown(o=>o.saas+o.pp+o.camp+o.payroll)); }
 function showMonthTopLineBreakdown(m){
-  const mr = ALL.filter(r=>r.month===m && (SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
+  const mr = ALL.filter(r=>r.month===m && ((SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform))));
   showBreakdown('Top-line revenue — '+monthLabel(m), restoBreakdown(o=>o.saas+o.pp+o.camp+o.payroll, mr));
 }
 function showMonthUncollectedBreakdown(m){
-  const mr = ALL.filter(r=>r.month===m && (SELECTED_STATES.size===0||SELECTED_STATES.has(r.state)));
+  const mr = ALL.filter(r=>r.month===m && ((SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform))));
   const items = healthRows(mr).filter(r=>r.owed>0.5).sort((a,b)=>b.owed-a.owed)
     .map(r=>({name:r.restaurant,label:r.restaurant,value:fmt(r.owed),sub:Math.round(r.ratio*100)+'% collected'}));
   showBreakdown('Uncollected revenue — '+monthLabel(m), items);
@@ -426,7 +445,7 @@ function renderProcessing(){
     card('Effective take-rate',take.toFixed(2)+'%')+card('Restaurants',all.length);
   const months=uniq(ALL.map(r=>r.month)).sort();
   upChart('ppChart',{type:'bar',data:{labels:months.map(monthLabel),datasets:[{label:'PP Revenue',
-    data:months.map(m=>Math.round(sumK(ALL.filter(r=>r.month===m&&(SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))),'pp'))),backgroundColor:'#B5790E',borderRadius:3}]},options:baseOpts()});
+    data:months.map(m=>Math.round(sumK(ALL.filter(r=>r.month===m&&((SELECTED_STATES.size===0||SELECTED_STATES.has(r.state))&&(SELECTED_PLATFORMS.size===0||SELECTED_PLATFORMS.has(r.platform)))),'pp'))),backgroundColor:'#B5790E',borderRadius:3}]},options:baseOpts()});
   document.getElementById('pp-list').innerHTML=pr.slice(0,15).map((r,i)=>{
     const tr=r.volume>0?(r.pp/r.volume*100).toFixed(2)+'%':'—';
     return `<div class="mini-item" style="cursor:pointer" onclick="openDetail('${escA(r.restaurant)}')">
@@ -583,6 +602,20 @@ function boot(){
     if(e.target.checked)SELECTED_STATES.add(e.target.value); else SELECTED_STATES.delete(e.target.value);
     msAll.checked = SELECTED_STATES.size===0;
     updateStateMsLabel();applyFilters();
+  });
+  // multi-select platform dropdown
+  const platBtn=document.getElementById('platMsBtn'), platPanel=document.getElementById('platMsPanel'), platAll=document.getElementById('platMsAll');
+  platBtn.addEventListener('click',e=>{e.stopPropagation();platPanel.hidden=!platPanel.hidden;});
+  document.addEventListener('click',e=>{if(!document.getElementById('platMsWrap').contains(e.target))platPanel.hidden=true;});
+  platAll.addEventListener('change',()=>{
+    if(platAll.checked){SELECTED_PLATFORMS.clear();document.querySelectorAll('.ms-plat-cb').forEach(cb=>cb.checked=false);}
+    updatePlatformMsLabel();applyFilters();
+  });
+  document.getElementById('platMsList').addEventListener('change',e=>{
+    if(!e.target.classList.contains('ms-plat-cb'))return;
+    if(e.target.checked)SELECTED_PLATFORMS.add(e.target.value); else SELECTED_PLATFORMS.delete(e.target.value);
+    platAll.checked = SELECTED_PLATFORMS.size===0;
+    updatePlatformMsLabel();applyFilters();
   });
   document.getElementById('refreshBtn').addEventListener('click',loadData);
   document.getElementById('rh-search').addEventListener('input',()=>drawHealthList(healthRows(ROWS)));
